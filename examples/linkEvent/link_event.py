@@ -115,7 +115,7 @@ if ok not in ['Y', 'y']:
     sys.exit()
 
 # set this variable to True to run the script in "Dummy Mode"
-dummy_mode = True
+dummy_mode = False
 
 # we set the video mode to current video mode then get the update the value.
 SCN_WIDTH = 0
