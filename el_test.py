@@ -157,6 +157,7 @@ def do_trial(trial):
     # get the currently active tracker object (connection)
     el_active = pylink.getEYELINK()
 
+
     # show some info about the current trial on the Host PC screen
     pars_to_show = (trial_condition[trial], trial + 1, N_TRIALS)
     status_message = 'Link event example, %s, Trial %d/%d' % pars_to_show
@@ -177,6 +178,7 @@ def do_trial(trial):
 
         # drift-check; re-do camera setup, if needed
         try:
+            pylink.openGraphics((SCN_WIDTH, SCN_HEIGHT), 32)
             error = el_tracker.doDriftCorrect(int(SCN_WIDTH/2.0),
                                               int(SCN_HEIGHT/2.0), 1, 1)
             # if the "ESC" key is pressed, get back to Camera Setup
@@ -186,6 +188,9 @@ def do_trial(trial):
                 el_tracker.doTrackerSetup()
         except:
             pass
+
+
+    pylink.closeGraphics()
 
     # switch tracker to idle mode
     el_tracker.setOfflineMode()
