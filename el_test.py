@@ -178,7 +178,6 @@ def do_trial(trial):
 
         # drift-check; re-do camera setup, if needed
         try:
-            pylink.openGraphics((SCN_WIDTH, SCN_HEIGHT), 32)
             error = el_tracker.doDriftCorrect(int(SCN_WIDTH/2.0),
                                               int(SCN_HEIGHT/2.0), 1, 1)
             # if the "ESC" key is pressed, get back to Camera Setup
@@ -299,6 +298,8 @@ def do_trial(trial):
 
     # end real-time mode
     pylink.endRealTimeMode()
+
+    pylink.openGraphics((SCN_WIDTH, SCN_HEIGHT), 32)
 
     return ret_value
 
