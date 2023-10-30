@@ -75,13 +75,19 @@
 from __future__ import division
 from __future__ import print_function
 
+import asyncio
+import json
 import time
 import sys
 import os
+from threading import Thread
+
 import pylink
 
 
 # so resource stimuli like images and sounds can be located with relative paths
+import websockets as websockets
+
 script_path = os.path.dirname(sys.argv[0])
 if len(script_path) != 0:
     os.chdir(script_path)
@@ -91,8 +97,11 @@ RIGHT_EYE = 1
 LEFT_EYE = 0
 BINOCULAR = 2
 
-N_TRIALS = 3
+N_TRIALS = 30
 TRIAL_DUR = 5000
+
+# set this variable to True to run the script in "Dummy Mode"
+dummy_mode = False
 
 
 # show some task instructions
@@ -111,8 +120,7 @@ else:
 if ok not in ['Y', 'y']:
     sys.exit()
 
-# set this variable to True to run the script in "Dummy Mode"
-dummy_mode = False
+
 
 # we set the video mode to current video mode then get the update the value.
 SCN_WIDTH = 0
@@ -151,16 +159,16 @@ def do_trial(trial):
     smp = None
 
     # open a plain text file to save the sample data
-    txt_file = os.path.join('results', 'samples_trial_%d.txt' % (trial + 1))
-    sample_txt = open(txt_file, 'w')
+    # txt_file = os.path.join('results', 'samples_trial_%d.txt' % (trial + 1))
+    # sample_txt = open(txt_file, 'w')
 
     # get the currently active tracker object (connection)
     el_active = pylink.getEYELINK()
 
 
     # show some info about the current trial on the Host PC screen
-    pars_to_show = (trial_condition[trial], trial + 1, N_TRIALS)
-    status_message = 'Link event example, %s, Trial %d/%d' % pars_to_show
+    pars_to_show = (trial + 1, N_TRIALS)
+    status_message = 'Round, Trial %d/%d' % pars_to_show
     el_tracker.sendCommand("record_status_message '%s'" % status_message)
 
     # log a TRIALID message to mark trial start, before starting to record.
@@ -171,25 +179,24 @@ def do_trial(trial):
     el_tracker.sendCommand("clear_screen 0")
 
     # perform a drift-check(/correction) at the start of each trial
-    while True:
-        # check whether we are still connected to the tracker
-        if not el_tracker.isConnected():
-            return pylink.ABORT_EXPT
-
-        # drift-check; re-do camera setup, if needed
-        try:
-            error = el_tracker.doDriftCorrect(int(SCN_WIDTH/2.0),
-                                              int(SCN_HEIGHT/2.0), 1, 1)
-            # if the "ESC" key is pressed, get back to Camera Setup
-            if error != pylink.ESC_KEY:
-                break
-            else:
-                el_tracker.doTrackerSetup()
-        except:
-            pass
-
-
-    pylink.closeGraphics()
+    # while True:
+    #     # check whether we are still connected to the tracker
+    #     if not el_tracker.isConnected():
+    #         return pylink.ABORT_EXPT
+    #
+    #     # drift-check; re-do camera setup, if needed
+    #     try:
+    #         # I don't want the tracker to draw the fixation cross
+    #         # That will happen in the browser
+    #         error = el_tracker.doDriftCorrect(int(SCN_WIDTH/2.0),
+    #                                           int(SCN_HEIGHT/2.0), 0,0)
+    #         # if the "ESC" key is pressed, get back to Camera Setup
+    #         if error != pylink.ESC_KEY:
+    #             break
+    #         else:
+    #             el_tracker.doTrackerSetup()
+    #     except:
+    #         pass
 
     # switch tracker to idle mode
     el_tracker.setOfflineMode()
@@ -200,108 +207,107 @@ def do_trial(trial):
     if error:
         return error
 
-    # begin the real-time mode
-    pylink.beginRealTimeMode(100)
-
-    # INSERT CODE TO DRAW INITIAL DISPLAY HERE
-
-    # log a message to mark the time at which the initial display came on
-    el_tracker.sendMessage("SYNCTIME")
-
-    # wait for link data to arrive
-    try:
-        el_tracker.waitForBlockStart(100, 1, 1)
-    except RuntimeError:
-        # wait time expired without link data
-        if pylink.getLastError()[0] == 0:
-            end_trial()
-            print("ERROR: No link data received!")
-            return pylink.TRIAL_ERROR
-        # for any other status simply re-raise the exception
-        else:
-            raise
-
-    # determine which eye(s) is/are available
-    eye_used = el_tracker.eyeAvailable()
-    if eye_used == RIGHT_EYE:
-        el_tracker.sendMessage("EYE_USED 1 RIGHT")
-    elif eye_used == LEFT_EYE or eye_used == BINOCULAR:
-        el_tracker.sendMessage("EYE_USED 0 LEFT")
-        eye_used = LEFT_EYE
-    else:
-        print("Error in getting the eye information!")
-        return pylink.TRIAL_ERROR
-
-    # reset keys and buttons on tracker
-    el_tracker.flushKeybuttons(0)
-
-    # get trial start time
-    start_time = pylink.currentTime()
-    # poll link events and samples
-    while True:
-        # first check if recording is aborted
-        # (returns 0 if no error, otherwise return codes, e.g.,
-        # REPEAT_TRIAL, SKIP_TRIAL, ABORT_EXPT, TRIAL_ERROR )
-        error = el_tracker.isRecording()
-        if error != pylink.TRIAL_OK:
-            end_trial()
-            return error
-
-        # check if trial duration exceeded
-        if pylink.currentTime() > (start_time + TRIAL_DUR):
-            el_tracker.sendMessage("TIMEOUT")
-            end_trial()
-            break
-
-        # program termination or ALT-F4 or CTRL-C keys
-        if el_tracker.breakPressed():
-            end_trial()
-            return pylink.ABORT_EXPT
-
-        # check for local ESC key to abort trial (useful in debugging)
-        elif el_tracker.escapePressed():
-            end_trial()
-            return pylink.SKIP_TRIAL
-
-        # do we have a sample in the sample buffer?
-        # and does it differ from the one we've seen before?
-        new_smp = el_tracker.getNewestSample()
-        if new_smp is not None:
-            if(smp is None or new_smp.getTime() != smp.getTime()):
-                # it is a new sample, mark it for future comparisons
-                smp = new_smp
-                # Check if the new sample has data for the eye
-                # currently being tracked,
-                if eye_used == RIGHT_EYE and smp.isRightSample():
-                    sample = smp.getRightEye().getGaze()
-                elif eye_used != RIGHT_EYE and smp.isLeftSample():
-                    sample = smp.getLeftEye().getGaze()
-
-                # INSERT OWN CODE (EX: GAZE-CONTINGENT GRAPHICS)
-
-                # save the sample time stamp and gaze position in the TXT file
-                # IMPORTANT: Sample data is saved in EDF data files on the Host
-                # PC users do not need to (and we do not recommend) recording
-                # sample data this way. We write samples to the TXT file here
-                # only for illustration purposes.
-                smp_to_save = (smp.getTime(), sample[0], sample[1])
-                sample_txt.write('%.1f\t%.2f\t%.2f\n' % smp_to_save)
-
-    # close the TXT file
-    sample_txt.close()
-
-    # record the trial variable in a message recognized by Data Viewer
-    el_active.sendMessage("!V TRIAL_VAR trial %d" % trial)
-
-    # return exit record status
-    ret_value = el_active.getRecordingStatus()
-
-    # end real-time mode
-    pylink.endRealTimeMode()
-
-    pylink.openGraphics((SCN_WIDTH, SCN_HEIGHT), 32)
-
-    return ret_value
+    # # begin the real-time mode
+    # pylink.beginRealTimeMode(100)
+    #
+    # # INSERT CODE TO DRAW INITIAL DISPLAY HERE
+    #
+    # # log a message to mark the time at which the initial display came on
+    # el_tracker.sendMessage("SYNCTIME")
+    #
+    # # wait for link data to arrive
+    # try:
+    #     el_tracker.waitForBlockStart(100, 1, 1)
+    # except RuntimeError:
+    #     # wait time expired without link data
+    #     if pylink.getLastError()[0] == 0:
+    #         end_trial()
+    #         print("ERROR: No link data received!")
+    #         return pylink.TRIAL_ERROR
+    #     # for any other status simply re-raise the exception
+    #     else:
+    #         raise
+    #
+    # # determine which eye(s) is/are available
+    # eye_used = el_tracker.eyeAvailable()
+    # if eye_used == RIGHT_EYE:
+    #     el_tracker.sendMessage("EYE_USED 1 RIGHT")
+    # elif eye_used == LEFT_EYE or eye_used == BINOCULAR:
+    #     el_tracker.sendMessage("EYE_USED 0 LEFT")
+    #     eye_used = LEFT_EYE
+    # else:
+    #     print("Error in getting the eye information!")
+    #     return pylink.TRIAL_ERROR
+    #
+    # # reset keys and buttons on tracker
+    # el_tracker.flushKeybuttons(0)
+    #
+    # # get trial start time
+    # start_time = pylink.currentTime()
+    # # poll link events and samples
+    # while True:
+    #     # first check if recording is aborted
+    #     # (returns 0 if no error, otherwise return codes, e.g.,
+    #     # REPEAT_TRIAL, SKIP_TRIAL, ABORT_EXPT, TRIAL_ERROR )
+    #     error = el_tracker.isRecording()
+    #     if error != pylink.TRIAL_OK:
+    #         end_trial()
+    #         return error
+    #
+    #     # check if trial duration exceeded
+    #     if pylink.currentTime() > (start_time + TRIAL_DUR):
+    #         el_tracker.sendMessage("TIMEOUT")
+    #         end_trial()
+    #         break
+    #
+    #     # program termination or ALT-F4 or CTRL-C keys
+    #     if el_tracker.breakPressed():
+    #         end_trial()
+    #         return pylink.ABORT_EXPT
+    #
+    #     # check for local ESC key to abort trial (useful in debugging)
+    #     elif el_tracker.escapePressed():
+    #         end_trial()
+    #         return pylink.SKIP_TRIAL
+    #
+    #     # do we have a sample in the sample buffer?
+    #     # and does it differ from the one we've seen before?
+    #     new_smp = el_tracker.getNewestSample()
+    #     if new_smp is not None:
+    #         if(smp is None or new_smp.getTime() != smp.getTime()):
+    #             # it is a new sample, mark it for future comparisons
+    #             smp = new_smp
+    #             # Check if the new sample has data for the eye
+    #             # currently being tracked,
+    #             if eye_used == RIGHT_EYE and smp.isRightSample():
+    #                 sample = smp.getRightEye().getGaze()
+    #             elif eye_used != RIGHT_EYE and smp.isLeftSample():
+    #                 sample = smp.getLeftEye().getGaze()
+    #
+    #             # INSERT OWN CODE (EX: GAZE-CONTINGENT GRAPHICS)
+    #
+    #             # save the sample time stamp and gaze position in the TXT file
+    #             # IMPORTANT: Sample data is saved in EDF data files on the Host
+    #             # PC users do not need to (and we do not recommend) recording
+    #             # sample data this way. We write samples to the TXT file here
+    #             # only for illustration purposes.
+    #             smp_to_save = (smp.getTime(), sample[0], sample[1])
+    #             sample_txt.write('%.1f\t%.2f\t%.2f\n' % smp_to_save)
+    #
+    # # close the TXT file
+    # sample_txt.close()
+    #
+    # # record the trial variable in a message recognized by Data Viewer
+    # el_active.send.Message("!V TRIAL_VAR trial %d" % trial)
+    #
+    # # return exit record status
+    # ret_value = el_active.getRecordingStatus()
+    #
+    # # end real-time mode
+    # pylink.endRealTimeMode()
+    #
+    #
+    # return ret_value
 
 
 def run_trials():
@@ -341,123 +347,159 @@ def run_trials():
 
 
 # ------ The experiment starts from here -----------------------
-
-# Step 1: initialize a tracker object with a Host IP address
-# The Host IP address by default is "100.1.1.1"
-# the "el_tracker" objected created here can be accessed through the Pylink
-# function .getEYELINK(); this is useful when you need to refer to the tracker
-# object when defining a function
-#
-# Set the Host PC address to "None" (without quotes) to run the script
-# in "Dummy Mode" (note this script cannot run in dummy mode, as we need to
-# extract eye movement date during recording
-if dummy_mode:
-    el_tracker = pylink.EyeLink(None)
-    print('ERROR: This task requires real-time gaze data.\n' +
-          'It cannot run in Dummy mode (with a simulated connection).')
-    sys.exit()
-else:
-    try:
-        el_tracker = pylink.EyeLink("100.1.1.1")
-    except RuntimeError as error:
-        print('ERROR:', error)
-        sys.exit()
-
-# Step 2: Initializes the graphics (for calibration & stimulus presentation)
-# INSERT THIRD PARTY GRAPHICS (e.g., Pygame) INITIALIZATION HERE IF NEEDED
-pylink.openGraphics((SCN_WIDTH, SCN_HEIGHT), 32)
-
-#query the current display info. I we started with 0 for SCN_WIDTH and SCN_HEIGHT,
-#we will have updated values. Otherwise, we should have same values. unless
-#the setvideo mode call fails.
-disp = pylink.getDisplayInformation()
-SCN_WIDTH = disp.width
-SCN_HEIGHT = disp.height
-
-
-# Step 3: Open an EDF data file on the Host PC
+el_tracker = None
 edf_file_name = "TEST.EDF"
-el_tracker.openDataFile(edf_file_name)
+def setup():
+    # Step 1: initialize a tracker object with a Host IP address
+    # The Host IP address by default is "100.1.1.1"
+    # the "el_tracker" objected created here can be accessed through the Pylink
+    # function .getEYELINK(); this is useful when you need to refer to the tracker
+    # object when defining a function
+    #
+    # Set the Host PC address to "None" (without quotes) to run the script
+    # in "Dummy Mode" (note this script cannot run in dummy mode, as we need to
+    # extract eye movement date during recording
+    if dummy_mode:
+        el_tracker = pylink.EyeLink(None)
+        print('ERROR: This task requires real-time gaze data.\n' +
+              'It cannot run in Dummy mode (with a simulated connection).')
+        sys.exit()
+    else:
+        try:
+            el_tracker = pylink.EyeLink("100.1.1.1")
+        except RuntimeError as error:
+            print('ERROR:', error)
+            sys.exit()
 
-# add a preamble text (data file header)
-preamble_text = 'RECORDED BY %s' % os.path.basename(__file__)
-el_tracker.sendCommand("add_file_preamble_text '%s'" % preamble_text)
+    # Step 2: Initializes the graphics (for calibration & stimulus presentation)
+    # INSERT THIRD PARTY GRAPHICS (e.g., Pygame) INITIALIZATION HERE IF NEEDED
+    pylink.openGraphics((SCN_WIDTH, SCN_HEIGHT), 32)
 
-# Step 4: setting up tracking, recording and calibration options
-# we first flush all key presses and put the tracker in the offline mode
-pylink.flushGetkeyQueue()
-el_tracker.setOfflineMode()
+    #query the current display info. I we started with 0 for SCN_WIDTH and SCN_HEIGHT,
+    #we will have updated values. Otherwise, we should have same values. unless
+    #the setvideo mode call fails.
+    disp = pylink.getDisplayInformation()
+    SCN_WIDTH = disp.width
+    SCN_HEIGHT = disp.height
 
-# The tracker needs to know the resolution of the screen the
-# subject is viewing
-pix_msg = "screen_pixel_coords 0 0 %d %d" % (SCN_WIDTH - 1, SCN_HEIGHT - 1)
-el_tracker.sendCommand(pix_msg)
-# The Data Viewer software also needs to know the screen
-# resolution for correct visualization
-dv_msg = "DISPLAY_COORDS  0 0 %d %d" % (SCN_WIDTH - 1, SCN_HEIGHT - 1)
-el_tracker.sendMessage(dv_msg)
+    # Step 3: Open an EDF data file on the Host PC
+    el_tracker.openDataFile(edf_file_name)
 
-# Get the software version:  1-EyeLink I, 2-EyeLink II, 3/4-EyeLink 1000,
-# 5-EyeLink 1000 Plus, 6-Portable DUO
-eyelink_ver = 0  # set version to 0, in case running in Dummy mode
-if not dummy_mode:
-    vstr = el_tracker.getTrackerVersionString()
-    eyelink_ver = int(vstr.split()[-1].split('.')[0])
-    # print out some version info in the shell
-    print('Running experiment on %s, version %d' % (vstr, eyelink_ver))
+    # add a preamble text (data file header)
+    preamble_text = 'RECORDED BY %s' % os.path.basename(__file__)
+    el_tracker.sendCommand("add_file_preamble_text '%s'" % preamble_text)
 
-# Select what data to save in the EDF file, for a detailed discussion
-# of the data flags, see the EyeLink User Manual, "Setting File Contents"
-file_event_flags = 'LEFT,RIGHT,FIXATION,SACCADE,BLINK,MESSAGE,BUTTON,INPUT'
-file_sample_flags = 'LEFT,RIGHT,GAZE,HREF,RAW,AREA,HTARGET,GAZERES,BUTTON,STATUS,INPUT'
-if eyelink_ver < 4:
-    file_sample_flags = 'LEFT,RIGHT,GAZE,HREF,RAW,AREA,GAZERES,BUTTON,STATUS,INPUT'
-el_tracker.sendCommand("file_event_filter = %s" % file_event_flags)
-el_tracker.sendCommand("file_sample_data = %s" % file_sample_flags)
-
-# Select what data is available over the link (for online data accessing)
-link_event_flags = 'LEFT,RIGHT,FIXATION,SACCADE,BLINK,BUTTON,FIXUPDATE,INPUT'
-link_sample_flags = 'LEFT,RIGHT,GAZE,GAZERES,AREA,HTARGET,STATUS,INPUT'
-if eyelink_ver < 4:
-    link_sample_flags = 'LEFT,RIGHT,GAZE,GAZERES,AREA,STATUS,INPUT'
-el_tracker.sendCommand("link_event_filter = %s" % link_event_flags)
-el_tracker.sendCommand("link_sample_data = %s" % link_sample_flags)
-
-# Set the calibration target and background color
-pylink.setCalibrationColors((0, 0, 0), (128, 128, 128))
-
-# select best size for calibration target
-pylink.setTargetSize(int(SCN_WIDTH/70.0), int(SCN_WIDTH/300.))
-
-# Set the calibraiton and drift correction sound
-pylink.setCalibrationSounds("", "", "")
-pylink.setDriftCorrectSounds("", "", "")
-
-# Step 5: Do the tracker setup at the beginning of the experiment.
-el_tracker.doTrackerSetup()
-
-# Step 6: Run trials. make sure display-tracker connection is established
-# and no program termination or ALT-F4 or CTRL-C pressed
-if el_tracker.isConnected() and not el_tracker.breakPressed():
-    run_trials()
-
-# Step 7: File transfer and cleanup
-if el_tracker is not None:
+    # Step 4: setting up tracking, recording and calibration options
+    # we first flush all key presses and put the tracker in the offline mode
+    pylink.flushGetkeyQueue()
     el_tracker.setOfflineMode()
-    pylink.msecDelay(500)
 
-    # Close the edf data file on the Host
-    el_tracker.closeDataFile()
+    # The tracker needs to know the resolution of the screen the
+    # subject is viewing
+    pix_msg = "screen_pixel_coords 0 0 %d %d" % (SCN_WIDTH - 1, SCN_HEIGHT - 1)
+    el_tracker.sendCommand(pix_msg)
+    # The Data Viewer software also needs to know the screen
+    # resolution for correct visualization
+    dv_msg = "DISPLAY_COORDS  0 0 %d %d" % (SCN_WIDTH - 1, SCN_HEIGHT - 1)
+    el_tracker.sendMessage(dv_msg)
 
-    # transfer the edf file to the Display PC and rename it
-    local_file_name = os.path.join(results_folder, edf_file_name)
+    # Get the software version:  1-EyeLink I, 2-EyeLink II, 3/4-EyeLink 1000,
+    # 5-EyeLink 1000 Plus, 6-Portable DUO
+    eyelink_ver = 0  # set version to 0, in case running in Dummy mode
+    if not dummy_mode:
+        vstr = el_tracker.getTrackerVersionString()
+        eyelink_ver = int(vstr.split()[-1].split('.')[0])
+        # print out some version info in the shell
+        print('Running experiment on %s, version %d' % (vstr, eyelink_ver))
 
-    try:
-        el_tracker.receiveDataFile(edf_file_name, local_file_name)
-    except RuntimeError as error:
-        print('ERROR:', error)
+    # Select what data to save in the EDF file, for a detailed discussion
+    # of the data flags, see the EyeLink User Manual, "Setting File Contents"
+    file_event_flags = 'LEFT,RIGHT,FIXATION,SACCADE,BLINK,MESSAGE,BUTTON,INPUT'
+    file_sample_flags = 'LEFT,RIGHT,GAZE,HREF,RAW,AREA,HTARGET,GAZERES,BUTTON,STATUS,INPUT'
+    if eyelink_ver < 4:
+        file_sample_flags = 'LEFT,RIGHT,GAZE,HREF,RAW,AREA,GAZERES,BUTTON,STATUS,INPUT'
+    el_tracker.sendCommand("file_event_filter = %s" % file_event_flags)
+    el_tracker.sendCommand("file_sample_data = %s" % file_sample_flags)
 
-# Step 8: close EyeLink connection and quit display-side graphics
-el_tracker.close()
-# Close the experiment graphics
-pylink.closeGraphics()
+    # Select what data is available over the link (for online data accessing)
+    link_event_flags = 'LEFT,RIGHT,FIXATION,SACCADE,BLINK,BUTTON,FIXUPDATE,INPUT'
+    link_sample_flags = 'LEFT,RIGHT,GAZE,GAZERES,AREA,HTARGET,STATUS,INPUT'
+    if eyelink_ver < 4:
+        link_sample_flags = 'LEFT,RIGHT,GAZE,GAZERES,AREA,STATUS,INPUT'
+    el_tracker.sendCommand("link_event_filter = %s" % link_event_flags)
+    el_tracker.sendCommand("link_sample_data = %s" % link_sample_flags)
+
+    # Set the calibration target and background color
+    pylink.setCalibrationColors((0, 0, 0), (128, 128, 128))
+
+    # select best size for calibration target
+    pylink.setTargetSize(int(SCN_WIDTH/70.0), int(SCN_WIDTH/300.))
+
+    # Set the calibraiton and drift correction sound
+    pylink.setCalibrationSounds("", "", "")
+    pylink.setDriftCorrectSounds("", "", "")
+
+    # Step 5: Do the tracker setup at the beginning of the experiment.
+    el_tracker.doTrackerSetup()
+    # Close the experiment graphics
+    # Moving this here, the browser will show all stimulus
+    pylink.closeGraphics()
+
+    #
+    # # Step 6: Run trials. make sure display-tracker connection is established
+    # # and no program termination or ALT-F4 or CTRL-C pressed
+    # if el_tracker.isConnected() and not el_tracker.breakPressed():
+    #     run_trials()
+
+def shutdown():
+    # Step 7: File transfer and cleanup
+    if el_tracker is not None:
+        el_tracker.setOfflineMode()
+        pylink.msecDelay(500)
+
+        # Close the edf data file on the Host
+        el_tracker.closeDataFile()
+
+        # transfer the edf file to the Display PC and rename it
+        local_file_name = os.path.join(results_folder, edf_file_name)
+
+        try:
+            el_tracker.receiveDataFile(edf_file_name, local_file_name)
+        except RuntimeError as error:
+            print('ERROR:', error)
+
+    # Step 8: close EyeLink connection and quit display-side graphics
+    el_tracker.close()
+
+
+PORT = 8345
+
+async def handler(websocket):
+    async for message in websocket:
+        print(message)
+        el_tracker.sendCommand(message)
+        msg = json.loads(message)
+        mtype = msg.type
+        period = msg.round_num
+        if mtype == 'rec_start':
+            do_trial(period)
+        elif mtype == 'rec_stop':
+            end_trial()
+        elif mtype == 'stop_exp':
+            shutdown()
+
+
+async def get_messages():
+    async with websockets.serve(handler, "", PORT):
+        await asyncio.Future()  # run forever
+
+
+def run_message_thread():
+    asyncio.run(get_messages())
+
+if __name__ == '__main__':
+    t = Thread(target=run_message_thread)
+    t.setDaemon(True)
+    t.start()
+
+    setup()
