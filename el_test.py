@@ -493,8 +493,8 @@ async def handler(websocket):
             end_trial()
         elif mtype == 'stop_exp':
             shutdown()
-        elif mtype == 'fixate':
-            do_drift_check()
+        # elif mtype == 'fixate':
+        #     do_drift_check()
 
         el_active.sendMessage(message)
 
