@@ -77,10 +77,8 @@ from __future__ import print_function
 
 import asyncio
 import json
-import time
 import sys
 import os
-from threading import Thread
 
 import pylink
 
@@ -175,25 +173,6 @@ def do_trial(trial):
     # clear tracker display to black
     el_tracker.sendCommand("clear_screen 0")
 
-    # perform a drift-check(/correction) at the start of each trial
-    # while True:
-    #     # check whether we are still connected to the tracker
-    #     if not el_tracker.isConnected():
-    #         return pylink.ABORT_EXPT
-    #
-    #     # drift-check; re-do camera setup, if needed
-    #     try:
-    #         # I don't want the tracker to draw the fixation cross
-    #         # That will happen in the browser
-    #         error = el_tracker.doDriftCorrect(int(SCN_WIDTH/2.0),
-    #                                           int(SCN_HEIGHT/2.0), 0,0)
-    #         # if the "ESC" key is pressed, get back to Camera Setup
-    #         if error != pylink.ESC_KEY:
-    #             break
-    #         else:
-    #             el_tracker.doTrackerSetup()
-    #     except:
-    #         pass
 
     # switch tracker to idle mode
     el_tracker.setOfflineMode()
@@ -305,6 +284,28 @@ def do_trial(trial):
     #
     #
     # return ret_value
+
+def do_drift_check():
+    el_tracker = pylink.getEYELINK()
+
+    # perform a drift-check(/correction) at the start of each trial
+    # while True:
+    # check whether we are still connected to the tracker
+    if not el_tracker.isConnected():
+        return pylink.ABORT_EXPT
+
+    # drift-check; re-do camera setup, if needed
+    try:
+        # I don't want the tracker to draw the fixation cross
+        # That will happen in the browser
+        disp = pylink.getDisplayInformation()
+        SCN_WIDTH = disp.width
+        SCN_HEIGHT = disp.height
+        error = el_tracker.doDriftCorrect(int(SCN_WIDTH/2.0),
+                                          int(SCN_HEIGHT/2.0), 0,0)
+    except Exception as e:
+        print("exception", e)
+        pass
 
 
 def run_trials():
@@ -472,24 +473,31 @@ def shutdown():
 
     # Step 8: close EyeLink connection and quit display-side graphics
     el_tracker.close()
+    exit()
 
 
 PORT = 8345
 
 async def handler(websocket):
     async for message in websocket:
-        print(message)
         el_active = pylink.getEYELINK()
-        el_active.sendMessage(message)
+        print(message)
+
         msg = json.loads(message)
         mtype = msg['mtype']
         period = msg['round_num']
+
         if mtype == 'rec_start':
             do_trial(period)
         elif mtype == 'rec_stop':
             end_trial()
         elif mtype == 'stop_exp':
             shutdown()
+        elif mtype == 'fixate':
+            do_drift_check()
+
+        el_active.sendMessage(message)
+
 
 
 async def get_messages():
@@ -497,13 +505,6 @@ async def get_messages():
         await asyncio.Future()  # run forever
 
 
-# def run_message_thread():
-    # asyncio.run(get_messages())
-
 if __name__ == '__main__':
-    #t = Thread(target=run_message_thread)
-    #t.setDaemon(True)
-    #t.start()
-
     setup()
     asyncio.run(get_messages())
