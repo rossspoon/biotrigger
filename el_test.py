@@ -122,9 +122,6 @@ if ok not in ['Y', 'y']:
 
 
 
-# we set the video mode to current video mode then get the update the value.
-SCN_WIDTH = 0
-SCN_HEIGHT = 0
 
 # create three trial conditions and store their parameters in list
 trial_condition = ['condition1', 'condition2', 'condition3']
@@ -163,7 +160,7 @@ def do_trial(trial):
     # sample_txt = open(txt_file, 'w')
 
     # get the currently active tracker object (connection)
-    el_active = pylink.getEYELINK()
+    el_tracker= pylink.getEYELINK()
 
 
     # show some info about the current trial on the Host PC screen
@@ -348,7 +345,7 @@ def run_trials():
 
 # ------ The experiment starts from here -----------------------
 el_tracker = None
-edf_file_name = "TEST.EDF"
+edf_file_name = "WEBTEST.EDF"
 def setup():
     # Step 1: initialize a tracker object with a Host IP address
     # The Host IP address by default is "100.1.1.1"
@@ -373,6 +370,9 @@ def setup():
 
     # Step 2: Initializes the graphics (for calibration & stimulus presentation)
     # INSERT THIRD PARTY GRAPHICS (e.g., Pygame) INITIALIZATION HERE IF NEEDED
+    # we set the video mode to current video mode then get the update the value.
+    SCN_WIDTH = 0
+    SCN_HEIGHT = 0
     pylink.openGraphics((SCN_WIDTH, SCN_HEIGHT), 32)
 
     #query the current display info. I we started with 0 for SCN_WIDTH and SCN_HEIGHT,
@@ -452,6 +452,8 @@ def setup():
     #     run_trials()
 
 def shutdown():
+    end_trial()
+    el_tracker = pylink.getEYELINK()
     # Step 7: File transfer and cleanup
     if el_tracker is not None:
         el_tracker.setOfflineMode()
@@ -477,10 +479,11 @@ PORT = 8345
 async def handler(websocket):
     async for message in websocket:
         print(message)
-        el_tracker.sendCommand(message)
+        el_active = pylink.getEYELINK()
+        el_active.sendMessage(message)
         msg = json.loads(message)
-        mtype = msg.type
-        period = msg.round_num
+        mtype = msg['mtype']
+        period = msg['round_num']
         if mtype == 'rec_start':
             do_trial(period)
         elif mtype == 'rec_stop':
@@ -494,12 +497,13 @@ async def get_messages():
         await asyncio.Future()  # run forever
 
 
-def run_message_thread():
-    asyncio.run(get_messages())
+# def run_message_thread():
+    # asyncio.run(get_messages())
 
 if __name__ == '__main__':
-    t = Thread(target=run_message_thread)
-    t.setDaemon(True)
-    t.start()
+    #t = Thread(target=run_message_thread)
+    #t.setDaemon(True)
+    #t.start()
 
     setup()
+    asyncio.run(get_messages())
