@@ -473,6 +473,9 @@ def shutdown():
     el_tracker.close()
     exit()
 
+def set_edf_file_name(pid, plab):
+    if pid and plab:
+        edf_file_name = f"el_data_{pid}_{plab}.edf"
 
 PORT = 8345
 async def handler(websocket):
@@ -484,6 +487,8 @@ async def handler(websocket):
         msg = json.loads(message)
         mtype = msg['mtype']
         period = int(msg['round_num'])
+        part_id = msg.get('participant')
+        part_lab = msg.get('p_label')
 
         # log a TRIALID message to mark trial start, before starting to record.
         # EyeLink Data Viewer defines the start of a trial by the TRIALID message.
@@ -493,10 +498,12 @@ async def handler(websocket):
         el_active.sendMessage(message)
 
         if mtype == 'rec_start':
+            set_edf_file_name(part_id, part_lab)
             do_trial(period)
         elif mtype == 'rec_stop':
             end_trial()
         elif mtype == 'stop_exp':
+            end_trial()
             shutdown()
         # elif mtype == 'fixate':
         #     do_drift_check()
