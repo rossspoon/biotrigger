@@ -490,6 +490,7 @@ async def handler(websocket):
         if period > current_round:
             current_round = period
             el_active.sendMessage("TRIALID %d" % current_round)
+        el_active.sendMessage(message)
 
         if mtype == 'rec_start':
             do_trial(period)
@@ -500,7 +501,6 @@ async def handler(websocket):
         # elif mtype == 'fixate':
         #     do_drift_check()
 
-        el_active.sendMessage(message)
 
 
 
