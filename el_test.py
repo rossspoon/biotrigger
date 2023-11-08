@@ -475,7 +475,7 @@ def shutdown(file_name):
 
 def set_edf_file_name(pid, plab):
     if pid and plab:
-        return edf_file_name = f"el_data_{pid}_{plab}.edf"
+        return  f"el_data_{pid}_{plab}.edf"
 
 PORT = 8345
 async def handler(websocket):
