@@ -450,7 +450,7 @@ def setup():
     # if el_tracker.isConnected() and not el_tracker.breakPressed():
     #     run_trials()
 
-def shutdown():
+def shutdown(file_name):
     end_trial()
     el_tracker = pylink.getEYELINK()
     # Step 7: File transfer and cleanup
@@ -462,10 +462,10 @@ def shutdown():
         el_tracker.closeDataFile()
 
         # transfer the edf file to the Display PC and rename it
-        local_file_name = os.path.join(results_folder, edf_file_name)
+        local_file_name = os.path.join(results_folder, file_name)
 
         try:
-            el_tracker.receiveDataFile(edf_file_name, local_file_name)
+            el_tracker.receiveDataFile(file_name, local_file_name)
         except RuntimeError as error:
             print('ERROR:', error)
 
@@ -475,11 +475,11 @@ def shutdown():
 
 def set_edf_file_name(pid, plab):
     if pid and plab:
-        edf_file_name = f"el_data_{pid}_{plab}.edf"
+        return edf_file_name = f"el_data_{pid}_{plab}.edf"
 
 PORT = 8345
 async def handler(websocket):
-    current_round = -99
+    shared_state = dict(current_round=-99, edf_file_name='EDF_TEST.EDF')
     async for message in websocket:
         el_active = pylink.getEYELINK()
         print(message)
@@ -492,19 +492,20 @@ async def handler(websocket):
 
         # log a TRIALID message to mark trial start, before starting to record.
         # EyeLink Data Viewer defines the start of a trial by the TRIALID message.
-        if period > current_round:
-            current_round = period
+        if period > shared_state['current_round']:
+            shared_state['current_round'] = period
             el_active.sendMessage("TRIALID %d" % current_round)
         el_active.sendMessage(message)
 
         if mtype == 'rec_start':
-            set_edf_file_name(part_id, part_lab)
+            file_name = set_edf_file_name(part_id, part_lab)
+            if file_name:
+                shared_state['edf_file_name'] = file_name
             do_trial(period)
         elif mtype == 'rec_stop':
             end_trial()
         elif mtype == 'stop_exp':
-            end_trial()
-            shutdown()
+            shutdown(shared_state['edf_file_name'])
         # elif mtype == 'fixate':
         #     do_drift_check()
 
