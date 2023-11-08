@@ -5,12 +5,16 @@ import websockets as websockets
 
 PORT = 8345
 
+SS = dict(cnt=0)
+
 async def handler(websocket):
     async for message in websocket:
         print(message)
         msg = json.loads(message)
         mtype = msg['mtype']
         period = msg['round_num']
+        print(f"cnt: {SS['cnt']}")
+        SS['cnt'] += 1
 
 
 async def get_messages():

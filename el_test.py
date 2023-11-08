@@ -478,8 +478,8 @@ def set_edf_file_name(pid, plab):
         return  f"el_data_{pid}_{plab}.edf"
 
 PORT = 8345
+shared_state = dict(current_round=-99, edf_file_name='EDF_TEST.EDF')
 async def handler(websocket):
-    shared_state = dict(current_round=-99, edf_file_name='EDF_TEST.EDF')
     async for message in websocket:
         el_active = pylink.getEYELINK()
         print(message)
