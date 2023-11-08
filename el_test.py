@@ -494,7 +494,7 @@ async def handler(websocket):
         # EyeLink Data Viewer defines the start of a trial by the TRIALID message.
         if period > shared_state['current_round']:
             shared_state['current_round'] = period
-            el_active.sendMessage("TRIALID %d" % current_round)
+            el_active.sendMessage("TRIALID %d" % period)
         el_active.sendMessage(message)
 
         if mtype == 'rec_start':
