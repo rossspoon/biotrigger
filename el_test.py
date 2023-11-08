@@ -166,9 +166,7 @@ def do_trial(trial):
     status_message = 'Round, Trial %d/%d' % pars_to_show
     el_tracker.sendCommand("record_status_message '%s'" % status_message)
 
-    # log a TRIALID message to mark trial start, before starting to record.
-    # EyeLink Data Viewer defines the start of a trial by the TRIALID message.
-    el_tracker.sendMessage("TRIALID %d" % trial)
+
 
     # clear tracker display to black
     el_tracker.sendCommand("clear_screen 0")
@@ -359,9 +357,9 @@ def setup():
     # extract eye movement date during recording
     if dummy_mode:
         el_tracker = pylink.EyeLink(None)
-        print('ERROR: This task requires real-time gaze data.\n' +
-              'It cannot run in Dummy mode (with a simulated connection).')
-        sys.exit()
+        # print('ERROR: This task requires real-time gaze data.\n' +
+        #       'It cannot run in Dummy mode (with a simulated connection).')
+        # sys.exit()
     else:
         try:
             el_tracker = pylink.EyeLink("100.1.1.1")
@@ -477,15 +475,21 @@ def shutdown():
 
 
 PORT = 8345
-
 async def handler(websocket):
+    current_round = -99
     async for message in websocket:
         el_active = pylink.getEYELINK()
         print(message)
 
         msg = json.loads(message)
         mtype = msg['mtype']
-        period = msg['round_num']
+        period = int(msg['round_num'])
+
+        # log a TRIALID message to mark trial start, before starting to record.
+        # EyeLink Data Viewer defines the start of a trial by the TRIALID message.
+        if period > current_round:
+            current_round = period
+            el_active.sendMessage("TRIALID %d" % current_round)
 
         if mtype == 'rec_start':
             do_trial(period)
