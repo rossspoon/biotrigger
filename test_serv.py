@@ -22,4 +22,7 @@ async def get_messages():
         await asyncio.Future()  # run forever
 
 if __name__ == '__main__':
-    asyncio.run(get_messages())
+    try:
+        asyncio.run(get_messages())
+    except KeyboardInterrupt:
+        print("Goodbye.")
