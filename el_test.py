@@ -344,7 +344,8 @@ def run_trials():
 
 # ------ The experiment starts from here -----------------------
 el_tracker = None
-edf_file_name = "WEBTEST.EDF"
+host_file_name = "WEBTEST.EDF"
+shared_state = dict(current_round=-99, edf_file_name=host_file_name)
 def setup():
     # Step 1: initialize a tracker object with a Host IP address
     # The Host IP address by default is "100.1.1.1"
@@ -382,7 +383,7 @@ def setup():
     SCN_HEIGHT = disp.height
 
     # Step 3: Open an EDF data file on the Host PC
-    el_tracker.openDataFile(edf_file_name)
+    el_tracker.openDataFile(host_file_name)
 
     # add a preamble text (data file header)
     preamble_text = 'RECORDED BY %s' % os.path.basename(__file__)
@@ -465,7 +466,7 @@ def shutdown(file_name):
         local_file_name = os.path.join(results_folder, file_name)
 
         try:
-            el_tracker.receiveDataFile(file_name, local_file_name)
+            el_tracker.receiveDataFile(host_file_name, local_file_name)
         except RuntimeError as error:
             print('ERROR:', error)
 
@@ -478,7 +479,6 @@ def set_edf_file_name(pid, plab):
         return  f"el_data_{pid}_{plab}.edf"
 
 PORT = 8345
-shared_state = dict(current_round=-99, edf_file_name='EDF_TEST.EDF')
 async def handler(websocket):
     async for message in websocket:
         el_active = pylink.getEYELINK()
@@ -519,4 +519,7 @@ async def get_messages():
 
 if __name__ == '__main__':
     setup()
-    asyncio.run(get_messages())
+    try:
+        asyncio.run(get_messages())
+    except KeyboardInterrupt:
+        print("Goodbye.")
