@@ -79,6 +79,7 @@ import asyncio
 import json
 import sys
 import os
+from datetime import datetime
 
 import pylink
 
@@ -490,11 +491,17 @@ async def handler(websocket):
         part_id = msg.get('participant')
         part_lab = msg.get('p_label')
 
+        dt = datetime.now()
+        dts = dt.strftime('%Y-%m-%d %H:%M:%S.%f')
+
         # log a TRIALID message to mark trial start, before starting to record.
         # EyeLink Data Viewer defines the start of a trial by the TRIALID message.
         if period > shared_state['current_round']:
             shared_state['current_round'] = period
             el_active.sendMessage("TRIALID %d" % period)
+
+        # record message and timestamp
+        el_active.sendMessage(f"TIME CHECK: {dts}")
         el_active.sendMessage(message)
 
         if mtype == 'rec_start':
