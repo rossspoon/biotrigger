@@ -478,7 +478,7 @@ def shutdown(file_name):
 def get_edf_file_name(pid, plab):
     if pid and plab:
         dt = datetime.now()
-        dts = dt.strftime('%Y-%m-%d %H:%M:%S')
+        dts = dt.strftime('%Y-%m-%d-%H-%M-%S')
         return  f"el_data_{dts}_{pid}_{plab}.edf"
 
 
