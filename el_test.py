@@ -502,10 +502,13 @@ async def handler(websocket):
             if file_name:
                 shared_state['edf_file_name'] = file_name
             do_trial(period)
+
         elif mtype == 'rec_stop':
             end_trial()
+
         elif mtype == 'stop_exp':
             shutdown(shared_state['edf_file_name'])
+
         # elif mtype == 'fixate':
         #     do_drift_check()
 
