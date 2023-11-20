@@ -462,31 +462,21 @@ def shutdown(file_name):
         # Close the edf data file on the Host
         el_tracker.closeDataFile()
 
-        # Step 8: close EyeLink connection and quit display-side graphics
-        el_tracker.close()
-
-        sleep(1)
-        get_file()
-
-
-##
-## Reopens a link to the eyetracker and retreives the file
-def get_file():
-        el= pylink.EyeLink("100.1.1.1")
         # transfer the edf file to the Display PC and rename it
         local_file_name = os.path.join(results_folder, file_name)
 
         try:
-            el.receiveDataFile(host_file_name, local_file_name)
+            el_tracker.receiveDataFile(host_file_name, local_file_name)
         except RuntimeError as error:
             print('ERROR:', error)
 
-
+    # Step 8: close EyeLink connection and quit display-side graphics
+    el_tracker.close()
+    exit()
 
 def set_edf_file_name(pid, plab):
     if pid and plab:
         return  f"el_data_{pid}_{plab}.edf"
-
 
 PORT = 8345
 async def handler(websocket):
@@ -516,7 +506,6 @@ async def handler(websocket):
             end_trial()
         elif mtype == 'stop_exp':
             shutdown(shared_state['edf_file_name'])
-            exit()
         # elif mtype == 'fixate':
         #     do_drift_check()
 
@@ -534,4 +523,3 @@ if __name__ == '__main__':
         asyncio.run(get_messages())
     except KeyboardInterrupt:
         print("Goodbye.")
-
