@@ -472,7 +472,6 @@ def shutdown(file_name):
 
     # Step 8: close EyeLink connection and quit display-side graphics
     el_tracker.close()
-    exit()
 
 
 def get_edf_file_name(pid, plab):
@@ -526,6 +525,7 @@ async def handler(websocket):
             shutdown(shared_state['edf_file_name'])
             print(f"Host File Name: {host_file_name}")
             print(f"Data File Name: {shared_state['edf_file_name']}")
+            exit()
 
         # elif mtype == 'fixate':
         #     do_drift_check()
