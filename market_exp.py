@@ -474,11 +474,19 @@ def shutdown(file_name):
     el_tracker.close()
     exit()
 
+
 def get_edf_file_name(pid, plab):
-    dt = datetime.now()
-    dts = dt.strftime('%Y-%m-%d %H:%M:%S')
     if pid and plab:
+        dt = datetime.now()
+        dts = dt.strftime('%Y-%m-%d %H:%M:%S')
         return  f"el_data_{dts}_{pid}_{plab}.edf"
+
+
+def get_host_file_name():
+    dt = datetime.now()
+    dts = dt.strftime('%m%d%H%M')
+    return  dts
+
 
 PORT = 8345
 async def handler(websocket):
@@ -516,6 +524,8 @@ async def handler(websocket):
 
         elif mtype == 'stop_exp':
             shutdown(shared_state['edf_file_name'])
+            print(f"Host File Name: {host_file_name}")
+            print(f"Data File Name: {shared_state['edf_file_name']}")
 
         # elif mtype == 'fixate':
         #     do_drift_check()
@@ -529,11 +539,13 @@ async def get_messages():
 
 
 if __name__ == '__main__':
-    host_file_name = get_edf_file_name('xxx', 'yyyy')
+    host_file_name = get_host_file_name()
+    print(f"Host File Name: {host_file_name}")
     setup()
     try:
         asyncio.run(get_messages())
     except KeyboardInterrupt:
         print("Goodbye.")
+        print(f"Host File Name: {host_file_name}")
     except SystemExit:
         print("Goodbye.")
