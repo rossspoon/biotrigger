@@ -529,7 +529,7 @@ async def get_messages():
 
 
 if __name__ == '__main__':
-    host_file_name = get_file_name('xxx', 'yyyy')
+    host_file_name = get_edf_file_name('xxx', 'yyyy')
     setup()
     try:
         asyncio.run(get_messages())
